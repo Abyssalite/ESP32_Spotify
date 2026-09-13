@@ -10,8 +10,8 @@
 #include <AsyncTCP.h>
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
-#include <base64.h>
 #include <Preferences.h>
+#include <JPEGDEC.h>
 
 #include "env.h"
 
@@ -19,7 +19,7 @@
 #define UPDATE_TFT_PERIOD 500
 #define RECONNECT_PERIOD 1000
 #define NOTIFY_PERIOD 1000
-#define API_PERIOD 60000
+#define API_PERIOD 30000
 
 unsigned long updateOledTimer = 0;
 unsigned long updateTftTimer = 0;
@@ -33,10 +33,8 @@ char* password = "";
 char* status   = "";
 String message = "";
 
-String clientId     = "";
-String clientSecret = "";
-String refreshToken = "";
-String accessToken  = "";
+String apiKey     = "";
+String userName = "";
 
 String imageUrl   = "";
 String songName   = "";
@@ -49,39 +47,27 @@ Preferences preferences;
 
 U8G2_SSD1306_72X40_ER_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, 6, 5);
 TFT_eSPI tft = TFT_eSPI();
+JPEGDEC jpeg;
 
-void saveTokens(String token) {
-  preferences.begin("spotify", false); //read-write
-  preferences.putString("refresh", token);
+void saveUser(String key, String user) {
+  preferences.begin("last.fm", false); //read-write
+  preferences.putString("key", key);
+  preferences.putString("user", user);
   preferences.end();
 }
 
-void saveUser(String id, String secret) {
-  preferences.begin("spotify", false); //read-write
-  preferences.putString("id", id);
-  preferences.putString("secret", secret);
+String loadApiKey() {
+  preferences.begin("last.fm", true); //read-only
+  String key = preferences.getString("key", "");
   preferences.end();
+  return key;
 }
 
-String loadRefreshToken() {
-  preferences.begin("spotify", true); //read-only
-  String token = preferences.getString("refresh", "");
+String loadUserName() {
+  preferences.begin("last.fm", true); //read-only
+  String user = preferences.getString("user", "");
   preferences.end();
-  return token;
-}
-
-String loadClientID() {
-  preferences.begin("spotify", true); //read-only
-  String id = preferences.getString("id", "");
-  preferences.end();
-  return id;
-}
-
-String loadClientSecret() {
-  preferences.begin("spotify", true); //read-only
-  String secret = preferences.getString("secret", "");
-  preferences.end();
-  return secret;
+  return user;
 }
 
 void notifyClients() {
@@ -122,105 +108,141 @@ void drawOled () {
 }
 
 void drawTft () {
-  switch (count) {
-    case 0: {
-      tft.fillScreen(TFT_RED);
-      break;
-    }
-    case 1: {
-      tft.fillScreen(TFT_GREEN);
-      break;
-    }
-    case 2: {
-      tft.fillScreen(TFT_BLUE);
-      break;
-    }
-  }
 }
 
-bool refreshAccessToken() {
-  if (refreshToken == "" || clientSecret == "" || clientSecret == "") {
-    Serial.println("Not enough authentication datas.");
-    return false;
-  }
+int drawTftJPEG(JPEGDRAW *pDraw) {
+  Serial.printf("Draw block: x=%d y=%d  w=%d h=%d\n", 
+                pDraw->x, pDraw->y, pDraw->iWidth, pDraw->iHeight);
 
-  HTTPClient http;
-  http.begin("https://accounts.spotify.com/api/token");
-  
-  // Basic Auth (Base64 of client_id:client_secret)
-  String auth = "Basic " + base64::encode(clientId + ":" + clientSecret);
-  http.addHeader("Authorization", auth);
-  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-
-  String body = "grant_type=refresh_token&refresh_token=" + refreshToken;
-  Serial.println(auth);
-
-  int httpCode = http.POST(body);
-  
-  if (httpCode == 200) {
-    String payload = http.getString();
-    
-    JsonDocument tokenJson;
-    deserializeJson(tokenJson, payload);
-    
-    accessToken = tokenJson["access_token"].as<String>();
-    Serial.println("Access token refreshed");
-    http.end();
-    return true;
-  } else {
-    Serial.printf("Token refresh failed: %d\n", httpCode);
-    Serial.println(http.getString());
-    http.end();
-    return false;
-  }
+  tft.pushImage(pDraw->x, pDraw->y, pDraw->iWidth, pDraw->iHeight, pDraw->pPixels);
+  return 1;
 }
 
-bool getCurrentSongData() {
-  if (accessToken == "") {
-    if (!refreshAccessToken()) return false;
+bool downloadAndDrawImage(int x, int y) {
+  if (imageUrl == "") {
+    Serial.println("No Image url");
+    return false;    
   }
-
+  
   HTTPClient http;
-  http.begin("https://api.spotify.com/v1/me/player/currently-playing");
-  http.addHeader("Authorization", "Bearer " + accessToken);
-
+  http.begin(imageUrl);
   int httpCode = http.GET();
-  
-  if (httpCode == 200) {
-    String payload = http.getString();
+
+  if (httpCode != 200) {
+    Serial.println("Download Image failed.");
+    Serial.printf("HTTP error: %d\n", httpCode);
     http.end();
+    return false;
+  }
 
-    JsonDocument songDataJson;
-    deserializeJson(songDataJson, payload);
-
-    // Check if something is playing
-    if (songDataJson["item"].isNull()) {
-      imageUrl   = "";
-      songName   = "Nothing is currently playing";
-      artistName = ""; 
-      return true;
-    }
-
-    imageUrl   = (String)songDataJson["item"]["album"]["images"][1]["url"];
-    songName   = (String)songDataJson["item"]["name"];
-    artistName = (String)songDataJson["item"]["artists"][0]["name"]; 
-
-    return true;
-  } 
-  else if (httpCode == 401) {
-    // Token expired
+  // Get the image data
+  int len = http.getSize();
+  uint8_t *buffer = (uint8_t *)malloc(len);
+  if (!buffer) {
+    Serial.println("Not enough memory");
     http.end();
-    if (refreshAccessToken()) {
-      return getCurrentSongData();   // retry once
-    }
+    return false;
   }
-  else {
-    Serial.printf("Error: %d\n", httpCode);
-    Serial.println(http.getString());
-  }
-  
+
+  WiFiClient *stream = http.getStreamPtr();
+  stream->readBytes(buffer, len);
   http.end();
-  return false;
+
+  // ===== Decode with JPEGDEC =====
+  if (jpeg.openRAM(buffer, len, drawTftJPEG)) {
+    Serial.printf("JPEG size: %d x %d\n", jpeg.getWidth(), jpeg.getHeight());
+
+    jpeg.setPixelType(RGB565_BIG_ENDIAN);  // important for TFT_eSPI
+
+    // Center the image
+    //int x = (240 - jpeg.getWidth()) / 2;
+    //if (x < 0) x = 0;
+    jpeg.setMaxOutputSize(100);
+    jpeg.decode(0, 0, 2);
+    jpeg.close();
+
+    Serial.println("Image drawn successfully");
+  } else {
+    Serial.println("JPEGDEC failed to open image");
+  }
+
+  free(buffer);
+  return true;
+}
+
+void showNowPlaying() {
+  tft.fillScreen(TFT_BLACK);
+
+  // Draw album art (top of screen)
+  if (!downloadAndDrawImage(0, 0))
+    Serial.println("Failed to print image");
+
+  // Song name
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextSize(2);
+  tft.drawString(songName.substring(0, 18), 120, 260);
+
+  // Artist name
+  tft.setTextColor(TFT_CYAN, TFT_BLACK);
+  tft.setTextSize(1);
+  tft.drawString(artistName.substring(0, 30), 120, 295);
+}
+
+bool getNowPlaying() {
+  if (userName == "" || apiKey == "") {
+    Serial.println("Missing login datas.");
+    return false;
+  }
+  HTTPClient http;
+
+  String url = "http://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks";
+  url += "&user=" + userName;
+  url += "&api_key=" + apiKey;
+  url += "&limit=1&format=json";
+
+  http.begin(url);
+  int httpCode = http.GET();
+
+  if (httpCode != 200) {
+    Serial.println("Get Song Data failed.");
+    Serial.printf("Last.fm error: %d\n", httpCode);
+    http.end();
+    return false;
+  }
+
+  String payload = http.getString();
+  http.end();
+
+  JsonDocument songJson;
+  deserializeJson(songJson, payload);
+
+  JsonObject track = songJson["recenttracks"]["track"][0];
+      Serial.println(track);
+
+  // Check if something is currently playing
+  if (track["@attr"]["nowplaying"] | false) {
+    imageUrl   = "";
+    songName   = "Nothing is currently playing";
+    artistName = ""; 
+    return true;
+  }
+
+  JsonArray images = track["image"];
+  if (images.size() >= 4) {
+    imageUrl = images[3]["#text"].as<String>();   // extralarge
+  } else if (images.size() >= 3) {
+    imageUrl = images[2]["#text"].as<String>();   // large
+  }
+
+  songName   = track["name"].as<String>();
+  artistName = track["artist"]["#text"].as<String>();
+
+  //if (imageUrl == "" || albumArtUrl.indexOf("2a96cbd8b46e442fc41c2b86b821562f") >= 0)
+  //  No image or default placeholder
+  //  imageUrl = "";
+
+  return true;
 }
 
 void setup() {
@@ -229,7 +251,9 @@ void setup() {
   WiFi.mode(WIFI_STA); 
   WiFi.begin(SSID, PASSWORD);
   tft.init();
+  tft.fillScreen(TFT_BLACK);
   u8g2.begin();
+  u8g2.enableUTF8Print();
 
   ws.onEvent(onWsEvent);
   server.addHandler(&ws);
@@ -237,21 +261,14 @@ void setup() {
   delay(1000);
 
   // #define in env.h
-  if (REFRESH_TOKEN == "")
-    refreshToken = loadRefreshToken();
-  else {
-    refreshToken = REFRESH_TOKEN;   
-    saveTokens(refreshToken);
-  }
-  // #define in env.h
-  if (CLIENT_ID == "" || CLIENT_SECRET == "") {
-    clientId = loadClientID();
-    clientSecret = loadClientSecret();
+  if (LASTFM_API_KEY == "" || LASTFM_USERNAME == "") {
+    apiKey = loadApiKey();
+    userName = loadUserName();
   }
   else {
-    clientId = CLIENT_ID;
-    clientSecret = CLIENT_SECRET;
-    saveUser(clientId, clientSecret);
+    apiKey = LASTFM_API_KEY;
+    userName = LASTFM_USERNAME;
+    saveUser(apiKey, userName);
   }
 }
 
@@ -276,7 +293,12 @@ void loop() {
 
   if (now - apiTimer >= API_PERIOD && (WiFi.status() == WL_CONNECTED)) {
     apiTimer = now;
-    Serial.println(getCurrentSongData());
+    if (getNowPlaying()) {
+      Serial.println(imageUrl);
+      Serial.println(songName);
+      Serial.println(artistName);
+      showNowPlaying();
+    }
   }
 
   ws.cleanupClients();
