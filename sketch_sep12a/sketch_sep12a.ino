@@ -20,6 +20,7 @@
 #define RECONNECT_PERIOD 1000
 #define NOTIFY_PERIOD 1000
 #define API_PERIOD 30000
+#define IMAGE_SIZE 120
 
 //unsigned long updateOledTimer = 0;
 unsigned long updateTftTimer = 0;
@@ -27,6 +28,7 @@ unsigned long reconnectTimer = 0;
 unsigned long apiTimer = 0;
 unsigned long lastNotify = 0;
 uint8_t count = 0;
+uint16_t *imageBuffer = nullptr;
 
 char* ssid     = "";
 char* password = "";
@@ -110,9 +112,63 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
 void drawTft () {
 }*/
 
-int drawTftJPEG(JPEGDRAW *pDraw) {
-  tft.pushImage(pDraw->x, pDraw->y, pDraw->iWidth, pDraw->iHeight, pDraw->pPixels);
+int savePixel(JPEGDRAW *pDraw) {
+  for (int y = 0; y < pDraw->iHeight; y++) {
+    int destY = pDraw->y + y;
+
+    if (destY < 0 || destY >= IMAGE_SIZE)
+      continue;
+
+    int srcX = 0;
+    int destX = pDraw->x;
+    int width = pDraw->iWidth;
+
+    // Clip left
+    if (destX < 0) {
+        srcX = -destX;
+        width -= srcX;
+        destX = 0;
+    }
+
+    // Clip right
+    if (destX + width > IMAGE_SIZE) {
+      width = IMAGE_SIZE - destX;
+    }
+
+    if (width <= 0)
+        continue;
+
+    memcpy(
+      imageBuffer + destY * IMAGE_SIZE + destX,
+      pDraw->pPixels + y * pDraw->iWidth + srcX,
+      width * sizeof(uint16_t)
+    );
+  }
   return 1;
+}
+
+void drawTftJPEG() {
+    const int center = IMAGE_SIZE / 2;
+    const int radius = IMAGE_SIZE / 2;
+    const int radius2 = radius * radius;
+
+    for (int y = 0; y < IMAGE_SIZE; y++) {
+        for (int x = 0; x < IMAGE_SIZE; x++) {
+
+            int dx = x - center;
+            int dy = y - center;
+
+            if (dx * dx + dy * dy > radius2)
+                continue;
+
+            uint16_t pixel = imageBuffer[y * IMAGE_SIZE + x];
+
+            tft.drawPixel(x * 2,     y * 2,     pixel);
+            tft.drawPixel(x * 2 + 1, y * 2,     pixel);
+            tft.drawPixel(x * 2,     y * 2 + 1, pixel);
+            tft.drawPixel(x * 2 + 1, y * 2 + 1, pixel);
+        }
+    }
 }
 
 void drawCircleMask(int cx, int cy, int radius) {
@@ -178,27 +234,32 @@ bool downloadAndDrawImage(int x, int y) {
     free(buffer);
     return false;
   }
-
+  Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
   // ===== Decode with JPEGDEC =====
-  if (jpeg.openRAM(buffer, totalLen, drawTftJPEG)) {
+  if (jpeg.openRAM(buffer, totalLen, savePixel)) {
     //Serial.printf("JPEG size: %d x %d\n", jpeg.getWidth(), jpeg.getHeight());
-    jpeg.setPixelType(RGB565_BIG_ENDIAN);
-    int x = (240 - jpeg.getWidth()) / 2;
-    int y = 0;
-    if (jpeg.decode(x, y, 0)) {
-      //Serial.println("Full size OK");
-    } else {
-      Serial.println("Full size failed, trying HALF");
-      jpeg.decode(x, y, JPEG_SCALE_HALF);
+      jpeg.setPixelType(RGB565_LITTLE_ENDIAN);
+
+    if(jpeg.getWidth() != IMAGE_SIZE || jpeg.getHeight() != IMAGE_SIZE) {
+      free(buffer);
+      jpeg.close();
+      return false;
+    }
+    if (!jpeg.decode(0, 0, 0)) {
+      free(buffer);
+      jpeg.close();
+      return false;
     }
     jpeg.close();
-    drawCircleMask(120, 120, 120);
 
   } else {
     Serial.println("JPEGDEC failed to open image");
+    free(buffer);
+    return false;
   }
 
   free(buffer);
+  drawTftJPEG();
   return true;
 }
 
@@ -207,6 +268,7 @@ void showNowPlaying() {
   if (!downloadAndDrawImage(0, 0))
     Serial.println("Failed to print image");
 
+  tft.fillRect(0, 241, 240, 120, TFT_BLACK);
   // Song name
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.setTextDatum(MC_DATUM);
@@ -248,7 +310,7 @@ String getItunesArtwork(String artist, String song) {
   if (imgJson["resultCount"] == 0) return "";
 
   String art = imgJson["results"][0]["artworkUrl100"].as<String>(); 
-  art.replace("100x100bb", "240x240bb");
+  art.replace("100x100bb", "120x120bb");
   art.replace("http://", "https://");
 
   return art;
@@ -308,10 +370,6 @@ void setup() {
   WiFi.begin(SSID, PASSWORD);
   tft.init();
   tft.fillScreen(TFT_BLACK);
-  tft.fillRect(0, 0, 240, 240, TFT_RED);
-  delay(1000);
-  tft.fillRect(20, 20, 200, 200, TFT_GREEN);
-  delay(1000);
 
   //u8g2.begin();
   //u8g2.enableUTF8Print();
@@ -330,6 +388,11 @@ void setup() {
     apiKey = LASTFM_API_KEY;
     userName = LASTFM_USERNAME;
     saveUser(apiKey, userName);
+  }
+
+  imageBuffer = (uint16_t*)malloc(IMAGE_SIZE * IMAGE_SIZE * sizeof(uint16_t));
+  if (!imageBuffer) {
+      Serial.println("Failed to allocate image buffer");
   }
 }
 
