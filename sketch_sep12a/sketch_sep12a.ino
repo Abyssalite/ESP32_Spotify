@@ -1,7 +1,7 @@
 
 #include <FS.h>
 #include <SPIFFS.h>
-#include <U8g2lib.h>
+//#include <U8g2lib.h>
 #include <TFT_eSPI.h>
 #include <SPI.h>
 #include <string>
@@ -21,7 +21,7 @@
 #define NOTIFY_PERIOD 1000
 #define API_PERIOD 30000
 
-unsigned long updateOledTimer = 0;
+//unsigned long updateOledTimer = 0;
 unsigned long updateTftTimer = 0;
 unsigned long reconnectTimer = 0;
 unsigned long apiTimer = 0;
@@ -45,7 +45,7 @@ AsyncWebSocket ws("/ws");
 JsonDocument telemetryJson;
 Preferences preferences;
 
-U8G2_SSD1306_72X40_ER_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, 6, 5);
+//U8G2_SSD1306_72X40_ER_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, 6, 5);
 TFT_eSPI tft = TFT_eSPI();
 JPEGDEC jpeg;
 
@@ -92,7 +92,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
     lastNotify = millis();
 }
 
-void drawOled () {
+/*void drawOled () {
   u8g2.firstPage();
   do {
     u8g2.setFont(u8g2_font_5x8_tf);
@@ -108,14 +108,23 @@ void drawOled () {
 }
 
 void drawTft () {
-}
+}*/
 
 int drawTftJPEG(JPEGDRAW *pDraw) {
-  Serial.printf("Draw block: x=%d y=%d  w=%d h=%d\n", 
-                pDraw->x, pDraw->y, pDraw->iWidth, pDraw->iHeight);
-
   tft.pushImage(pDraw->x, pDraw->y, pDraw->iWidth, pDraw->iHeight, pDraw->pPixels);
   return 1;
+}
+
+void drawCircleMask(int cx, int cy, int radius) {
+  for (int y = 0; y < 240; y++) {
+    for (int x = 0; x < 240; x++) {
+      int dx = x - cx;
+      int dy = y - cy;
+      if (dx*dx + dy*dy > radius*radius) {
+        tft.drawPixel(x, y, TFT_BLACK);
+      }
+    }
+  }
 }
 
 bool downloadAndDrawImage(int x, int y) {
@@ -126,6 +135,7 @@ bool downloadAndDrawImage(int x, int y) {
   
   HTTPClient http;
   http.begin(imageUrl);
+  http.setTimeout(15000);
   int httpCode = http.GET();
 
   if (httpCode != 200) {
@@ -136,8 +146,10 @@ bool downloadAndDrawImage(int x, int y) {
   }
 
   // Get the image data
-  int len = http.getSize();
-  uint8_t *buffer = (uint8_t *)malloc(len);
+  int totalLen = http.getSize();
+  if (totalLen <= 0) return false;
+
+  uint8_t *buffer = (uint8_t *)malloc(totalLen);
   if (!buffer) {
     Serial.println("Not enough memory");
     http.end();
@@ -145,23 +157,43 @@ bool downloadAndDrawImage(int x, int y) {
   }
 
   WiFiClient *stream = http.getStreamPtr();
-  stream->readBytes(buffer, len);
+  int bytesRead = 0;
+  unsigned long timeout = millis() + 10000;
+
+  while (http.connected() && (bytesRead < totalLen) && millis() < timeout) {
+    size_t avail = stream->available();
+    if (avail) {
+      int toRead = min((int)avail, totalLen - bytesRead);
+      int got = stream->readBytes(buffer + bytesRead, toRead);
+      if (got > 0) bytesRead += got;
+    } else {
+      delay(2);
+    }
+  }
+
   http.end();
 
+  if (bytesRead != totalLen) {
+    Serial.println("Incomplete download - abort");
+    free(buffer);
+    return false;
+  }
+
   // ===== Decode with JPEGDEC =====
-  if (jpeg.openRAM(buffer, len, drawTftJPEG)) {
-    Serial.printf("JPEG size: %d x %d\n", jpeg.getWidth(), jpeg.getHeight());
-
-    jpeg.setPixelType(RGB565_BIG_ENDIAN);  // important for TFT_eSPI
-
-    // Center the image
-    //int x = (240 - jpeg.getWidth()) / 2;
-    //if (x < 0) x = 0;
-    jpeg.setMaxOutputSize(100);
-    jpeg.decode(0, 0, 2);
+  if (jpeg.openRAM(buffer, totalLen, drawTftJPEG)) {
+    //Serial.printf("JPEG size: %d x %d\n", jpeg.getWidth(), jpeg.getHeight());
+    jpeg.setPixelType(RGB565_BIG_ENDIAN);
+    int x = (240 - jpeg.getWidth()) / 2;
+    int y = 0;
+    if (jpeg.decode(x, y, 0)) {
+      //Serial.println("Full size OK");
+    } else {
+      Serial.println("Full size failed, trying HALF");
+      jpeg.decode(x, y, JPEG_SCALE_HALF);
+    }
     jpeg.close();
+    drawCircleMask(120, 120, 120);
 
-    Serial.println("Image drawn successfully");
   } else {
     Serial.println("JPEGDEC failed to open image");
   }
@@ -171,8 +203,6 @@ bool downloadAndDrawImage(int x, int y) {
 }
 
 void showNowPlaying() {
-  tft.fillScreen(TFT_BLACK);
-
   // Draw album art (top of screen)
   if (!downloadAndDrawImage(0, 0))
     Serial.println("Failed to print image");
@@ -187,6 +217,41 @@ void showNowPlaying() {
   tft.setTextColor(TFT_CYAN, TFT_BLACK);
   tft.setTextSize(1);
   tft.drawString(artistName.substring(0, 30), 120, 295);
+}
+
+String getItunesArtwork(String artist, String song) {
+  if (artist == "" || song == "") {
+    Serial.println("Missing song datas.");
+    return "";
+  }
+
+  HTTPClient http;
+  String term = artist + " " + song;
+  term.replace(" ", "+");
+
+  String url = "https://itunes.apple.com/search?term=" + term + "&entity=song&limit=1";
+
+  http.begin(url);
+  int code = http.GET();
+
+  if (code != 200) {
+    http.end();
+    return "";
+  }
+
+  String payload = http.getString();
+  http.end();
+
+  JsonDocument imgJson;
+  deserializeJson(imgJson, payload);
+
+  if (imgJson["resultCount"] == 0) return "";
+
+  String art = imgJson["results"][0]["artworkUrl100"].as<String>(); 
+  art.replace("100x100bb", "240x240bb");
+  art.replace("http://", "https://");
+
+  return art;
 }
 
 bool getNowPlaying() {
@@ -218,30 +283,21 @@ bool getNowPlaying() {
   deserializeJson(songJson, payload);
 
   JsonObject track = songJson["recenttracks"]["track"][0];
-      Serial.println(track);
+  imageUrl   = "";
+  artistName = ""; 
+  songName   = "";
 
   // Check if something is currently playing
   if (track["@attr"]["nowplaying"] | false) {
-    imageUrl   = "";
-    songName   = "Nothing is currently playing";
-    artistName = ""; 
     return true;
   }
-
-  JsonArray images = track["image"];
-  if (images.size() >= 4) {
-    imageUrl = images[3]["#text"].as<String>();   // extralarge
-  } else if (images.size() >= 3) {
-    imageUrl = images[2]["#text"].as<String>();   // large
-  }
-
   songName   = track["name"].as<String>();
   artistName = track["artist"]["#text"].as<String>();
+  imageUrl   = getItunesArtwork(artistName, songName);
 
-  //if (imageUrl == "" || albumArtUrl.indexOf("2a96cbd8b46e442fc41c2b86b821562f") >= 0)
-  //  No image or default placeholder
-  //  imageUrl = "";
-
+  if (imageUrl == "")
+    imageUrl = "https://shared.fastly.steamstatic.com/community_assets/images/apps/636270/f2bab463067e93719abcc2678101eaa58b8f2fd2.jpg";
+  
   return true;
 }
 
@@ -252,8 +308,13 @@ void setup() {
   WiFi.begin(SSID, PASSWORD);
   tft.init();
   tft.fillScreen(TFT_BLACK);
-  u8g2.begin();
-  u8g2.enableUTF8Print();
+  tft.fillRect(0, 0, 240, 240, TFT_RED);
+  delay(1000);
+  tft.fillRect(20, 20, 200, 200, TFT_GREEN);
+  delay(1000);
+
+  //u8g2.begin();
+  //u8g2.enableUTF8Print();
 
   ws.onEvent(onWsEvent);
   server.addHandler(&ws);
@@ -275,7 +336,7 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
-  if (now - updateOledTimer >= UPDATE_OLED_PERIOD) {
+  /*if (now - updateOledTimer >= UPDATE_OLED_PERIOD) {
     updateOledTimer = now;
     drawOled();
   }
@@ -284,7 +345,7 @@ void loop() {
     updateTftTimer = now;
     count = (count + 1) % 3;
     drawTft();
-  }
+  }*/
 
   if (now - lastNotify >= NOTIFY_PERIOD) {
     lastNotify = now;
@@ -297,9 +358,10 @@ void loop() {
       Serial.println(imageUrl);
       Serial.println(songName);
       Serial.println(artistName);
+      Serial.println("===");
       showNowPlaying();
+      Serial.println();
     }
   }
-
   ws.cleanupClients();
 }
