@@ -19,8 +19,9 @@
 #define UPDATE_TFT_PERIOD 500
 #define RECONNECT_PERIOD 1000
 #define NOTIFY_PERIOD 1000
-#define API_PERIOD 30000
-#define IMAGE_SIZE 120
+#define API_PERIOD 10000
+#define IMAGE_SIZE 160
+#define DISPLAY_SIZE 240
 
 //unsigned long updateOledTimer = 0;
 unsigned long updateTftTimer = 0;
@@ -29,6 +30,7 @@ unsigned long apiTimer = 0;
 unsigned long lastNotify = 0;
 uint8_t count = 0;
 uint16_t *imageBuffer = nullptr;
+float imageAngle = 0.0f;
 
 char* ssid     = "";
 char* password = "";
@@ -148,42 +150,55 @@ int savePixel(JPEGDRAW *pDraw) {
 }
 
 void drawTftJPEG() {
-    const int center = IMAGE_SIZE / 2;
-    const int radius = IMAGE_SIZE / 2;
-    const int radius2 = radius * radius;
+  const float srcCenter = 79.5f;
+  const float dstCenter = 119.5f;
 
-    for (int y = 0; y < IMAGE_SIZE; y++) {
-        for (int x = 0; x < IMAGE_SIZE; x++) {
+  const int radius = DISPLAY_SIZE / 2;
+  const int radius2 = radius * radius;
 
-            int dx = x - center;
-            int dy = y - center;
+  const float scale = 1.5f;
 
-            if (dx * dx + dy * dy > radius2)
-                continue;
+  float rad = imageAngle * PI / 180.0f;
+  float cosA = cos(rad);
+  float sinA = sin(rad);
 
-            uint16_t pixel = imageBuffer[y * IMAGE_SIZE + x];
+  for (int y = 0; y < DISPLAY_SIZE; y++) {
+    for (int x = 0; x < DISPLAY_SIZE; x++) {
 
-            tft.drawPixel(x * 2,     y * 2,     pixel);
-            tft.drawPixel(x * 2 + 1, y * 2,     pixel);
-            tft.drawPixel(x * 2,     y * 2 + 1, pixel);
-            tft.drawPixel(x * 2 + 1, y * 2 + 1, pixel);
-        }
-    }
-}
+      // Circular mask
+      int dxScreen = x - 120;
+      int dyScreen = y - 120;
 
-void drawCircleMask(int cx, int cy, int radius) {
-  for (int y = 0; y < 240; y++) {
-    for (int x = 0; x < 240; x++) {
-      int dx = x - cx;
-      int dy = y - cy;
-      if (dx*dx + dy*dy > radius*radius) {
-        tft.drawPixel(x, y, TFT_BLACK);
-      }
+      if (dxScreen * dxScreen + dyScreen * dyScreen > radius2)
+        continue;
+
+      // Position relative to destination center
+      float dx = (x - dstCenter) / scale;
+      float dy = (y - dstCenter) / scale;
+
+      // Reverse rotation to find source pixel
+      float srcX = dx * cosA + dy * sinA;
+      float srcY = -dx * sinA + dy * cosA;
+
+      srcX += srcCenter;
+      srcY += srcCenter;
+
+      int ix = round(srcX);
+      int iy = round(srcY);
+
+      // Outside source image
+      if (ix < 0 || ix >= IMAGE_SIZE ||
+          iy < 0 || iy >= IMAGE_SIZE)
+        continue;
+
+      uint16_t pixel = imageBuffer[iy * IMAGE_SIZE + ix];
+
+      tft.drawPixel(x, y, pixel);
     }
   }
 }
 
-bool downloadAndDrawImage(int x, int y) {
+bool downloadAndSaveImage(int x, int y) {
   if (imageUrl == "") {
     Serial.println("No Image url");
     return false;    
@@ -235,6 +250,7 @@ bool downloadAndDrawImage(int x, int y) {
     return false;
   }
   Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
+
   // ===== Decode with JPEGDEC =====
   if (jpeg.openRAM(buffer, totalLen, savePixel)) {
     //Serial.printf("JPEG size: %d x %d\n", jpeg.getWidth(), jpeg.getHeight());
@@ -245,7 +261,7 @@ bool downloadAndDrawImage(int x, int y) {
       jpeg.close();
       return false;
     }
-    if (!jpeg.decode(0, 0, 0)) {
+    if (!jpeg.decode(x, y, 0)) {
       free(buffer);
       jpeg.close();
       return false;
@@ -259,14 +275,13 @@ bool downloadAndDrawImage(int x, int y) {
   }
 
   free(buffer);
-  drawTftJPEG();
   return true;
 }
 
 void showNowPlaying() {
   // Draw album art (top of screen)
-  if (!downloadAndDrawImage(0, 0))
-    Serial.println("Failed to print image");
+  if (!downloadAndSaveImage(0, 0))
+    Serial.println("Failed to save image");
 
   tft.fillRect(0, 241, 240, 120, TFT_BLACK);
   // Song name
@@ -310,7 +325,7 @@ String getItunesArtwork(String artist, String song) {
   if (imgJson["resultCount"] == 0) return "";
 
   String art = imgJson["results"][0]["artworkUrl100"].as<String>(); 
-  art.replace("100x100bb", "120x120bb");
+  art.replace("100x100bb", "160x160bb");
   art.replace("http://", "https://");
 
   return art;
@@ -402,13 +417,16 @@ void loop() {
   /*if (now - updateOledTimer >= UPDATE_OLED_PERIOD) {
     updateOledTimer = now;
     drawOled();
-  }
+  }*/
 
   if (now - updateTftTimer >= UPDATE_TFT_PERIOD) {
     updateTftTimer = now;
-    count = (count + 1) % 3;
-    drawTft();
-  }*/
+    drawTftJPEG();
+
+    imageAngle += 1.0f;
+    if (imageAngle >= 360.0f)
+      imageAngle = 0.0f;
+  }
 
   if (now - lastNotify >= NOTIFY_PERIOD) {
     lastNotify = now;
@@ -418,12 +436,7 @@ void loop() {
   if (now - apiTimer >= API_PERIOD && (WiFi.status() == WL_CONNECTED)) {
     apiTimer = now;
     if (getNowPlaying()) {
-      Serial.println(imageUrl);
-      Serial.println(songName);
-      Serial.println(artistName);
-      Serial.println("===");
       showNowPlaying();
-      Serial.println();
     }
   }
   ws.cleanupClients();
