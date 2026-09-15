@@ -1,0 +1,15 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:Esp32_Display_Connect.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="800"
+             x:Class="Esp32_Display_Connect.Views.MainView"
+             x:DataType="vm:MainViewModel">
+
+	<Design.DataContext>
+		<vm:MainViewModel />
+	</Design.DataContext>
+
+	<ContentControl Content="{Binding ViewHost.MainView}" />
+</UserControl>

@@ -1,7 +1,7 @@
 
 #include <FS.h>
 #include <SPIFFS.h>
-//#include <U8g2lib.h>
+#include <U8g2lib.h>
 #include <TFT_eSPI.h>
 #include <SPI.h>
 #include <string>
@@ -26,7 +26,7 @@
 #define SCROLL_INTERVAL 500
 #define SCROLL_STEP 8
 
-//unsigned long updateOledTimer = 0;
+unsigned long updateOledTimer = 0;
 unsigned long updateTftTimer = 0;
 unsigned long reconnectTimer = 0;
 unsigned long apiTimer = 0;
@@ -58,7 +58,7 @@ AsyncWebSocket ws("/ws");
 JsonDocument telemetryJson;
 Preferences preferences;
 
-//U8G2_SSD1306_72X40_ER_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, 6, 5);
+U8G2_SSD1306_72X40_ER_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, 6, 5);
 TFT_eSPI tft = TFT_eSPI();
 JPEGDEC jpeg;
 
@@ -105,7 +105,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
     lastNotify = millis();
 }
 
-/*void drawOled () {
+void drawOled () {
   u8g2.firstPage();
   do {
     u8g2.setFont(u8g2_font_5x8_tf);
@@ -119,9 +119,6 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
     u8g2.print(status);
   } while (u8g2.nextPage()); 
 }
-
-void drawTft () {
-}*/
 
 int savePixel(JPEGDRAW *pDraw) {
   for (int y = 0; y < pDraw->iHeight; y++) {
@@ -448,8 +445,8 @@ void setup() {
   tft.fillScreen(TFT_BLACK);
   tft.setRotation(2); // 180° flip
 
-  //u8g2.begin();
-  //u8g2.enableUTF8Print();
+  u8g2.begin();
+  u8g2.enableUTF8Print();
 
   ws.onEvent(onWsEvent);
   server.addHandler(&ws);
@@ -477,10 +474,10 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
-  /*if (now - updateOledTimer >= UPDATE_OLED_PERIOD) {
+  if (now - updateOledTimer >= UPDATE_OLED_PERIOD) {
     updateOledTimer = now;
     drawOled();
-  }*/
+  }
 
   if (now - updateTftTimer >= UPDATE_TFT_PERIOD && isPlaying) {
     updateTftTimer = now;

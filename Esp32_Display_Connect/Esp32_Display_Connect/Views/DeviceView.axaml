@@ -1,0 +1,143 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:Esp32_Display_Connect.ViewModels"
+             x:Class="Esp32_Display_Connect.Views.DeviceView"
+             x:DataType="vm:DeviceViewModel">
+
+    <Grid RowDefinitions="Auto,*">
+        <Border Grid.Row="0" VerticalAlignment="Center" CornerRadius="10" Background="#3333">
+            <Grid ColumnDefinitions="Auto,*">		
+                <Button
+                    Grid.Column="0"
+                    Width="40" 
+                    Height="40" 
+                    Padding="10"
+                    Margin="10"
+                    CornerRadius="30"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
+                    HorizontalContentAlignment="Center"
+                    VerticalContentAlignment="Center"
+                    BorderBrush="Transparent"
+                    Background="#FAAA"
+                    Command="{Binding BackCommand}">
+                    <Image Source="avares://Esp32_Display_Connect/Assets/icons8-back-100.png"
+                        Stretch="Uniform"
+                        Width="50"
+                        Height="50" />
+                </Button>   
+
+                <StackPanel Grid.Column="1" 
+                    HorizontalAlignment="Center" 
+                    VerticalAlignment="Center"
+                    Margin="0 0 0 20">
+
+                    <TextBlock  Text="{Binding SelectedDevice.Name}" 
+                        FontSize="30"
+                        HorizontalAlignment="Center" />
+                        
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock  Text="{Binding SelectedDevice.Address}" 
+                            FontSize="22"
+                            Margin="5" />
+                        <TextBlock  Text="{Binding Status}" 
+                            FontSize="22"
+                            Margin="5" />
+                    </StackPanel>
+                </StackPanel>
+            </Grid>   
+        </Border>
+
+        <Border 
+            Grid.Row="1" 
+            VerticalAlignment="Center" 
+            CornerRadius="10" 
+            Margin="100 0" 
+            Background="#3333">
+            
+            <Grid Margin="25"
+                RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                RowSpacing="8">
+
+                <TextBlock Grid.Row="0"
+                    Text="Set Temperature"
+                    FontWeight="SemiBold"
+                    Margin="0 8 0 0" />
+                <Grid Grid.Row="1"
+                    ColumnDefinitions="50,*"
+                    ColumnSpacing="10">
+                    <TextBlock Grid.Column="0"
+                        FontSize="18"
+                        VerticalAlignment="Center" />
+
+                    <Slider Grid.Column="1"
+                        Minimum="-10"
+                        Maximum="30"
+                        TickFrequency="0.5"
+                        IsSnapToTickEnabled="True"
+                        TickPlacement="BottomRight"/>
+                </Grid>
+
+                <TextBlock Grid.Row="2"
+                    Text="Fan 1 Speed"
+                    FontWeight="SemiBold"
+                    Margin="0 8 0 0" />
+                <Grid Grid.Row="3"
+                    ColumnDefinitions="50,*"
+                    ColumnSpacing="10">
+                    <TextBlock Grid.Column="0"
+                        FontSize="18"
+                        VerticalAlignment="Center" />
+
+                    <Slider Grid.Column="1"
+                        Minimum="1"
+                        Maximum="100"
+                        TickFrequency="1"
+                        IsSnapToTickEnabled="True"
+                        TickPlacement="BottomRight"/>
+                </Grid>
+
+                <TextBlock Grid.Row="4"
+                    Text="Fan 2 Speed"
+                    FontWeight="SemiBold"
+                    Margin="0 8 0 0" />
+                <Grid Grid.Row="5"
+                    ColumnDefinitions="50,*"
+                    ColumnSpacing="10">
+                    <TextBlock Grid.Column="0"
+                        FontSize="18"
+                        VerticalAlignment="Center" />
+
+                    <Slider Grid.Column="1"
+                        Minimum="1"
+                        Maximum="100"
+                        TickFrequency="1"
+                        IsSnapToTickEnabled="True"
+                        TickPlacement="BottomRight"/>
+                </Grid>
+
+                <TextBlock Grid.Row="6"
+                    Text="TEC Power"
+                    FontWeight="SemiBold"
+                    Margin="0 8 0 0" />
+                <Grid Grid.Row="7"
+                    ColumnDefinitions="50,*"
+                    ColumnSpacing="10">
+                    <TextBlock Grid.Column="0"
+                        FontSize="18"
+                        VerticalAlignment="Center" />
+
+                    <Slider Grid.Column="1"
+                        Minimum="1"
+                        Maximum="100"
+                        TickFrequency="1"
+                        IsSnapToTickEnabled="True"
+                        TickPlacement="BottomRight"/>
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+
+</UserControl>

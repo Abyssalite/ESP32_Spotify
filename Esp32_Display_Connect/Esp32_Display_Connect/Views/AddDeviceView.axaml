@@ -1,0 +1,56 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:Esp32_Display_Connect.ViewModels"
+             x:Class="Esp32_Display_Connect.Views.AddDeviceView"
+             x:DataType="vm:AddDeviceViewModel">
+
+	<Border x:Name="DeviceAddBorder" VerticalAlignment="Center" CornerRadius="10" Background="#3333">
+        <Grid ColumnDefinitions="Auto,*">		
+            <Button
+                Grid.Column="0"
+                Width="40" 
+                Height="40" 
+                Padding="10"
+                Margin="10"
+                CornerRadius="30"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                HorizontalContentAlignment="Center"
+                VerticalContentAlignment="Center"
+                BorderBrush="Transparent"
+                Background="#FAAA"
+                Command="{Binding BackCommand}">
+                <Image Source="avares://Esp32_Display_Connect/Assets/icons8-back-100.png"
+                    Stretch="Uniform"
+                    Width="50"
+                    Height="50" />
+            </Button>   
+
+            <Grid x:Name="DeviceAddStack" 
+                Grid.Column="1" 
+				HorizontalAlignment="Stretch" 
+                VerticalAlignment="Center"
+                IsVisible="False">	
+
+                <StackPanel x:Name="DeviceAddTextStack" HorizontalAlignment="Stretch">
+                    <TextBox Watermark="Device name" Text="{Binding Name}" Margin="8" />
+                    <TextBox Watermark="IP address" Text="{Binding Address}" Margin="8" />
+                </StackPanel>
+
+                <Button x:Name="DeviceAddListButton"
+                    Content="Add"
+                    Width="80" 
+                    Height="40" 
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    HorizontalContentAlignment="Center"
+                    VerticalContentAlignment="Center"
+                    Padding="10" 
+                    Command="{Binding AddDeviceCommand}" />  
+            </Grid>    
+        </Grid>   
+	</Border>
+
+</UserControl>
