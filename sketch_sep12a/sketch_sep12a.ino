@@ -14,6 +14,7 @@
 #include <JPEGDEC.h>
 
 #include "env.h"
+#include "cd_image.h"
 
 #define UPDATE_OLED_PERIOD 2000
 #define UPDATE_TFT_PERIOD 500
@@ -21,28 +22,36 @@
 #define NOTIFY_PERIOD 1000
 #define API_PERIOD 10000
 #define IMAGE_SIZE 160
-#define DISPLAY_SIZE 240
+#define DISPLAY_WIDTH 240
+#define SCROLL_INTERVAL 500
+#define SCROLL_STEP 8
 
 //unsigned long updateOledTimer = 0;
 unsigned long updateTftTimer = 0;
 unsigned long reconnectTimer = 0;
 unsigned long apiTimer = 0;
 unsigned long lastNotify = 0;
-uint8_t count = 0;
+unsigned long lastScrollTime = 0;
+
+//uint8_t count = 0;
 uint16_t *imageBuffer = nullptr;
 float imageAngle = 0.0f;
+int scrollOffset = 0;
+bool scrollDirection = true;   // true = moving left, false = moving right
 
 char* ssid     = "";
 char* password = "";
 char* status   = "";
 String message = "";
 
-String apiKey     = "";
+String apiKey   = "";
 String userName = "";
 
 String imageUrl   = "";
 String songName   = "";
 String artistName = ""; 
+String currentSongName = "";
+bool isPlaying = false;
 
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
@@ -153,7 +162,7 @@ void drawTftJPEG() {
   const float srcCenter = 79.5f;
   const float dstCenter = 119.5f;
 
-  const int radius = DISPLAY_SIZE / 2;
+  const int radius = DISPLAY_WIDTH / 2;
   const int radius2 = radius * radius;
 
   const float scale = 1.5f;
@@ -162,8 +171,8 @@ void drawTftJPEG() {
   float cosA = cos(rad);
   float sinA = sin(rad);
 
-  for (int y = 0; y < DISPLAY_SIZE; y++) {
-    for (int x = 0; x < DISPLAY_SIZE; x++) {
+  for (int y = 0; y < DISPLAY_WIDTH; y++) {
+    for (int x = 0; x < DISPLAY_WIDTH; x++) {
 
       // Circular mask
       int dxScreen = x - 120;
@@ -254,7 +263,7 @@ bool downloadAndSaveImage(int x, int y) {
   // ===== Decode with JPEGDEC =====
   if (jpeg.openRAM(buffer, totalLen, savePixel)) {
     //Serial.printf("JPEG size: %d x %d\n", jpeg.getWidth(), jpeg.getHeight());
-      jpeg.setPixelType(RGB565_LITTLE_ENDIAN);
+    jpeg.setPixelType(RGB565_LITTLE_ENDIAN);
 
     if(jpeg.getWidth() != IMAGE_SIZE || jpeg.getHeight() != IMAGE_SIZE) {
       free(buffer);
@@ -278,22 +287,81 @@ bool downloadAndSaveImage(int x, int y) {
   return true;
 }
 
+bool loadDefaultPicture() {
+   // ===== Decode with JPEGDEC =====
+  if (jpeg.openFLASH((uint8_t *)cdImage, cdImageSize, savePixel)) {
+    jpeg.setPixelType(RGB565_LITTLE_ENDIAN);
+
+    if (!jpeg.decode(0, 0, 0)) {
+      jpeg.close();
+      return false;
+    }
+    jpeg.close();
+
+  } else {
+    return false;
+  }
+
+  return true;
+}
+
+void drawScrollingText(String text, int y, uint16_t color, uint8_t textSize) {
+  tft.setTextSize(textSize);
+  tft.setTextDatum(TL_DATUM);    // Top-Left
+
+  int textWidth = tft.textWidth(text);
+  int areaHeight = (textSize == 2) ? 20 : 12;
+
+  // Clear text area
+  tft.fillRect(0, y - 4, 240, areaHeight + 4, TFT_BLACK);
+
+  if (textWidth <= DISPLAY_WIDTH) {
+    tft.setTextDatum(MC_DATUM); // Middle-Center
+    tft.setTextColor(color, TFT_BLACK);
+    tft.drawString(text, 120, y);
+    return;
+  }
+
+  // Scroll text
+  if (scrollDirection) {
+    scrollOffset -= SCROLL_STEP;
+    if (scrollOffset <= -(textWidth - DISPLAY_WIDTH + 10)) {
+      scrollDirection = false;      // reverse direction
+    }
+  } else {
+    scrollOffset += SCROLL_STEP;
+    if (scrollOffset >= 10) {
+      scrollDirection = true;       // reverse direction
+    }
+  }
+
+  tft.setViewport(0, y - 4, 240, areaHeight);
+  tft.setTextColor(color, TFT_BLACK);
+  tft.setCursor(scrollOffset, 4);   // relative to viewport
+  tft.print(text);
+  tft.resetViewport();
+}
+
 void showNowPlaying() {
-  // Draw album art (top of screen)
-  if (!downloadAndSaveImage(0, 0))
-    Serial.println("Failed to save image");
+  // Draw album art
+  if (songName != currentSongName) {
+    imageUrl = getItunesArtwork(artistName, songName);
 
-  tft.fillRect(0, 241, 240, 120, TFT_BLACK);
+    if (!downloadAndSaveImage(0, 0))
+      if(!loadDefaultPicture())
+        Serial.println("Failed to load default image");   
+
+    currentSongName = songName;
+    imageAngle = 0.0f;
+    scrollOffset = 0;
+    scrollDirection = true;  
+  }
+
+  tft.fillRect(0, 241, 240, 80, TFT_BLACK);
   // Song name
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setTextDatum(MC_DATUM);
-  tft.setTextSize(2);
-  tft.drawString(songName.substring(0, 18), 120, 260);
-
+  drawScrollingText(songName, 260, TFT_WHITE, 2);
   // Artist name
-  tft.setTextColor(TFT_CYAN, TFT_BLACK);
-  tft.setTextSize(1);
-  tft.drawString(artistName.substring(0, 30), 120, 295);
+  drawScrollingText(artistName, 295, TFT_CYAN, 1);
 }
 
 String getItunesArtwork(String artist, String song) {
@@ -360,20 +428,13 @@ bool getNowPlaying() {
   deserializeJson(songJson, payload);
 
   JsonObject track = songJson["recenttracks"]["track"][0];
-  imageUrl   = "";
   artistName = ""; 
   songName   = "";
 
   // Check if something is currently playing
-  if (track["@attr"]["nowplaying"] | false) {
-    return true;
-  }
+  isPlaying = (track["@attr"]["nowplaying"].as<String>() == "null") ? false : true;
   songName   = track["name"].as<String>();
   artistName = track["artist"]["#text"].as<String>();
-  imageUrl   = getItunesArtwork(artistName, songName);
-
-  if (imageUrl == "")
-    imageUrl = "https://shared.fastly.steamstatic.com/community_assets/images/apps/636270/f2bab463067e93719abcc2678101eaa58b8f2fd2.jpg";
   
   return true;
 }
@@ -385,6 +446,7 @@ void setup() {
   WiFi.begin(SSID, PASSWORD);
   tft.init();
   tft.fillScreen(TFT_BLACK);
+  tft.setRotation(2); // 180° flip
 
   //u8g2.begin();
   //u8g2.enableUTF8Print();
@@ -406,9 +468,10 @@ void setup() {
   }
 
   imageBuffer = (uint16_t*)malloc(IMAGE_SIZE * IMAGE_SIZE * sizeof(uint16_t));
-  if (!imageBuffer) {
+  if (!imageBuffer)
       Serial.println("Failed to allocate image buffer");
-  }
+  if(!loadDefaultPicture())
+      Serial.println("Failed to load default image");
 }
 
 void loop() {
@@ -419,13 +482,24 @@ void loop() {
     drawOled();
   }*/
 
-  if (now - updateTftTimer >= UPDATE_TFT_PERIOD) {
+  if (now - updateTftTimer >= UPDATE_TFT_PERIOD && isPlaying) {
     updateTftTimer = now;
     drawTftJPEG();
-
+    
     imageAngle += 1.0f;
     if (imageAngle >= 360.0f)
       imageAngle = 0.0f;
+  }
+
+  if (now - apiTimer >= API_PERIOD && (WiFi.status() == WL_CONNECTED)) {
+    apiTimer = now;
+    if (!getNowPlaying())
+      Serial.println("Failed to get current song");
+  }
+
+  if (now - lastScrollTime >= SCROLL_INTERVAL) {
+    lastScrollTime = now;
+    showNowPlaying();
   }
 
   if (now - lastNotify >= NOTIFY_PERIOD) {
@@ -433,11 +507,5 @@ void loop() {
     notifyClients();
   }
 
-  if (now - apiTimer >= API_PERIOD && (WiFi.status() == WL_CONNECTED)) {
-    apiTimer = now;
-    if (getNowPlaying()) {
-      showNowPlaying();
-    }
-  }
   ws.cleanupClients();
 }
