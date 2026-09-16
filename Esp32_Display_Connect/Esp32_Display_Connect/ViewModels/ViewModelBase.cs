@@ -21,7 +21,6 @@ public partial class ViewModelBase : ObservableObject
         Store store,
         INavigatorService navigator,
         IEventHub events
-
     ){
         _store = store;
         _navigator = navigator;

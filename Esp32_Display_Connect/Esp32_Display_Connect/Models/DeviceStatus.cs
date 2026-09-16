@@ -1,4 +1,4 @@
-public class DeviceStatus
+public sealed class DeviceStatus
 {
     public int Fan1Speed { get; set; }
     public int Fan2Speed { get; set; }
