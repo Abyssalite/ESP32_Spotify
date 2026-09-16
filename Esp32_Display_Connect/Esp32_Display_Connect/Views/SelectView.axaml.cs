@@ -9,6 +9,7 @@ namespace Esp32_Display_Connect.Views;
 public partial class SelectView : UserControl
 {
     private CancellationTokenSource? _resizeToken;
+    private bool _layoutInitialized = false;
 
     public SelectView()
     {

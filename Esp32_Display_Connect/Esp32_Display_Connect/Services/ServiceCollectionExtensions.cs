@@ -7,12 +7,11 @@ public static class ServiceCollectionExtensions
     {
         collection.AddSingleton<Store>();
         collection.AddSingleton<IDeviceConnectionService, DeviceConnectionService>();
+        //collection.AddSingleton<IBluetoothService, BluetoothService>();
 
         collection.AddTransient<MainViewModel>();
         collection.AddTransient<SelectViewModel>();
         collection.AddTransient<AddDeviceViewModel>();
         collection.AddTransient<DeviceViewModel>();
-        collection.AddTransient<TabBarViewModel>();
-
     }
 }
