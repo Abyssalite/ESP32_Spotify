@@ -1,0 +1,100 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:Esp32_Display_Connect.ViewModels"
+             x:Class="Esp32_Display_Connect.Views.BluetoothView"
+             x:DataType="vm:BluetoothViewModel">
+
+	<Border x:Name="DeviceSelectBorder" VerticalAlignment="Center" CornerRadius="10" Background="#3333">
+        <Grid ColumnDefinitions="Auto,*">		
+            <Button
+                Grid.Column="0"
+                Width="40" 
+                Height="40" 
+                Padding="10"
+                Margin="10"
+                CornerRadius="30"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                HorizontalContentAlignment="Center"
+                VerticalContentAlignment="Center"
+                BorderBrush="Transparent"
+                Background="#FAAA"
+                Command="{Binding BackCommand}">
+                <Image Source="avares://Esp32_Display_Connect/Assets/icons8-back-100.png"
+                    Stretch="Uniform"
+                    Width="50"
+                    Height="50" />
+            </Button>   
+            
+            <Grid x:Name="DeviceSelectStack" 
+                Grid.Column="1" 
+				HorizontalAlignment="Stretch" 
+                VerticalAlignment="Center" 
+                IsVisible="False">	
+                    <ListBox x:Name="DeviceSelectListBox"
+                        ItemsSource="{Binding BtDevicesList}"
+                        HorizontalAlignment="Stretch" 
+                        VerticalAlignment="Center" 
+                        SelectionMode="Single"
+                        Background="Transparent"
+                        ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                        ScrollViewer.VerticalScrollBarVisibility="Auto"
+                        SelectedItem="{Binding $parent[UserControl].((vm:BluetoothViewModel)DataContext)?.SelectedBtDevice, Mode=TwoWay}">
+                        <ListBox.Styles>
+                            <Style Selector="ListBox.vertical">
+                                <Setter Property="ItemsPanel">
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Vertical"/>
+                                    </ItemsPanelTemplate>
+                                </Setter>
+                            </Style>
+
+                            <Style Selector="ListBox.horizontal">
+                                <Setter Property="ItemsPanel">
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </Setter>
+                            </Style>
+                        </ListBox.Styles>
+
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <Border
+                                        Width="160"
+                                        Height="80"
+                                        CornerRadius="20"
+                                        Background="gray">
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Name}" 
+                                                HorizontalAlignment="Center" 
+                                                VerticalAlignment="Center" 
+                                                FontSize="14" />     
+                                            <TextBlock Text="{Binding Rssi, StringFormat='Strength: {0} dBm'}"                                            HorizontalAlignment="Center" 
+                                                VerticalAlignment="Center" 
+                                                FontSize="14" />
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>   
+
+                <Button x:Name="RescanCommandButton"
+                    Content="BLE Scanning" 
+                    HorizontalAlignment="Center" 
+                    VerticalAlignment="Center" 
+                    HorizontalContentAlignment="Center"
+                    VerticalContentAlignment="Center"
+                    Height="80"
+                    Width="160"
+                    CornerRadius="20"
+                    Command="{Binding RescanCommand}" />
+            </Grid>
+        </Grid>
+	</Border>
+
+</UserControl>

@@ -36,7 +36,7 @@ public partial class AddDeviceView : UserControl
 
         var width = topLevel.Bounds.Width;
 
-        if (width < 800)
+        if (width <= 800)
         {
             DeviceAddBorder.Margin = new Thickness(20, 50, 20, 50);
             DeviceAddTextStack.Margin = new Thickness(0, 0, 0, 20);
@@ -44,8 +44,8 @@ public partial class AddDeviceView : UserControl
 
             DeviceAddStack.RowDefinitions = new RowDefinitions("*,Auto");
             DeviceAddStack.ColumnDefinitions = new ColumnDefinitions("*");
-            Grid.SetRow(DeviceAddListButton, 1);
-            Grid.SetColumn(DeviceAddListButton, 0);
+            Grid.SetRow(DeviceAddButton, 1);
+            Grid.SetColumn(DeviceAddButton, 0);
         }
 
         else if (width > 800)
@@ -56,8 +56,8 @@ public partial class AddDeviceView : UserControl
 
             DeviceAddStack.RowDefinitions = new RowDefinitions("*");
             DeviceAddStack.ColumnDefinitions = new ColumnDefinitions("*,Auto");
-            Grid.SetRow(DeviceAddListButton, 0);
-            Grid.SetColumn(DeviceAddListButton, 1);
+            Grid.SetRow(DeviceAddButton, 0);
+            Grid.SetColumn(DeviceAddButton, 1);
         }
 
         if (!_layoutInitialized)

@@ -6,6 +6,8 @@ public sealed class BluetoothDevice
 
     public string? Name { get; init; }
 
+    public string[]? Uuids { get; init; }
+
     public short? Rssi { get; init; }
 
     // Linux.Bluetooth object path.

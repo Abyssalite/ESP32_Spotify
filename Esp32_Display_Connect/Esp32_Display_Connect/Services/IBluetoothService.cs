@@ -2,16 +2,17 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia_EventHub;
 
 public interface IBluetoothService
 {
-    event EventHandler<BluetoothDevice>? DeviceDiscovered;
-
     Task<IReadOnlyList<BluetoothDevice>> ScanAsync(
         TimeSpan duration,
+        IEventHub _events,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<BluetoothDevice>> GetKnownDeviceAsync();
+    void PrintDeviceDescriptionAsync(BluetoothDevice device);
     Task ConnectAsync(BluetoothDevice device);
-
     Task DisconnectAsync();
 }

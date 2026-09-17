@@ -10,7 +10,6 @@
 		<Grid x:Name="DeviceSelectStack" 
 			HorizontalAlignment="Center"
 			VerticalAlignment="Center" 
-			Margin="20 100"
             IsVisible="False">	
                 <ListBox x:Name="DeviceSelectListBox"
 					ItemsSource="{Binding DevicesList}"
@@ -57,7 +56,18 @@
                     </ListBox.ItemTemplate>
                 </ListBox>   
 
-			<Button x:Name="DeviceSelectListButton"
+			<Button x:Name="BluetoothCommandButton"
+				Content="BLE Device Add" 
+				HorizontalAlignment="Center" 
+				VerticalAlignment="Center" 
+				HorizontalContentAlignment="Center"
+                VerticalContentAlignment="Center"
+				Height="80"
+				Width="160"
+				CornerRadius="20"
+				Command="{Binding BluetoothCommand}" />
+
+			<Button x:Name="AddDeviceCommandButton"
 				Content="Add Manually" 
 				HorizontalAlignment="Center" 
 				VerticalAlignment="Center" 

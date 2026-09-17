@@ -1,15 +1,12 @@
 using System;
 using System.Threading.Tasks;
+using Avalonia_EventHub;
 
 public interface IDeviceConnectionService
 {
-    event EventHandler<DeviceStatus>? StatusReceived;
-    event EventHandler<string>? ConnectionStatusChanged;
-
-    Task ConnectAsync(Device device);
+    Task ConnectAsync(Device device, IEventHub _events);
     Task DisconnectAsync();
 
     void Send(string message);
-
     bool IsConnected { get; }
 }

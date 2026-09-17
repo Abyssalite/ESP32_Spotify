@@ -14,5 +14,6 @@ public static class ServiceCollectionExtensions
         collection.AddTransient<SelectViewModel>();
         collection.AddTransient<AddDeviceViewModel>();
         collection.AddTransient<DeviceViewModel>();
+        collection.AddTransient<BluetoothViewModel>();
     }
 }

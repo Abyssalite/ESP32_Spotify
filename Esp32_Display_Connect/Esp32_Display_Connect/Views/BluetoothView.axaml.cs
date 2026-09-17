@@ -6,12 +6,12 @@ using Avalonia.Threading;
 
 namespace Esp32_Display_Connect.Views;
 
-public partial class SelectView : UserControl
+public partial class BluetoothView : UserControl
 {
     private CancellationTokenSource? _resizeToken;
     private bool _layoutInitialized = false;
 
-    public SelectView()
+    public BluetoothView()
     {
         InitializeComponent();
 
@@ -47,10 +47,8 @@ public partial class SelectView : UserControl
 
             DeviceSelectStack.RowDefinitions = new RowDefinitions("*,Auto,Auto");
             DeviceSelectStack.ColumnDefinitions = new ColumnDefinitions("*");
-            Grid.SetRow(BluetoothCommandButton, 1);
-            Grid.SetColumn(BluetoothCommandButton, 0);
-            Grid.SetRow(AddDeviceCommandButton, 2);
-            Grid.SetColumn(AddDeviceCommandButton, 0);
+            Grid.SetRow(RescanCommandButton, 1);
+            Grid.SetColumn(RescanCommandButton, 0);
         }
 
         else if (width > 800)
@@ -64,10 +62,8 @@ public partial class SelectView : UserControl
 
             DeviceSelectStack.RowDefinitions = new RowDefinitions("*");
             DeviceSelectStack.ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto");
-            Grid.SetRow(BluetoothCommandButton, 0);
-            Grid.SetColumn(BluetoothCommandButton, 1);
-            Grid.SetRow(AddDeviceCommandButton, 0);
-            Grid.SetColumn(AddDeviceCommandButton, 2);
+            Grid.SetRow(RescanCommandButton, 0);
+            Grid.SetColumn(RescanCommandButton, 1);
         }
 
         if (!_layoutInitialized)

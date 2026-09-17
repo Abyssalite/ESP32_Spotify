@@ -12,8 +12,9 @@ namespace Esp32_Display_Connect.ViewModels;
 public partial class SelectViewModel : ViewModelBase
 {    
     public ICommand AddDeviceCommand { get; }
+    public ICommand? BluetoothCommand { get; }
 
-    public ObservableCollection<Device> DevicesList { get; }
+    public ObservableCollection<Device>? DevicesList { get; }
     private Device? _selectedDevice;
     public Device? SelectedDevice
     {
@@ -38,6 +39,14 @@ public partial class SelectViewModel : ViewModelBase
     {
         DevicesList = _store.DevicesList;
         AddDeviceCommand = new AsyncRelayCommand(addDeviceAsync);
+        BluetoothCommand = new AsyncRelayCommand(openBluetooth);
+
+    }
+
+    public async Task openBluetooth()
+    {        
+        var vm = App.Services?.GetRequiredService<BluetoothViewModel>();
+        await _navigator.NavigateMain(vm); 
     }
 
     async Task addDeviceAsync()
@@ -51,7 +60,7 @@ public partial class SelectViewModel : ViewModelBase
 
     private async Task OpenDeviceAsync(Device device)
     {
-        _store.SelectedDevice = device;
+        _store.SelectDevice(device);
 
         var vm = App.Services?.GetRequiredService<DeviceViewModel>();
         await _navigator.NavigateMain(vm);     
