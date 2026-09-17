@@ -14,5 +14,8 @@ public interface IBluetoothService
     Task<IReadOnlyList<BluetoothDevice>> GetKnownDeviceAsync();
     void PrintDeviceDescriptionAsync(BluetoothDevice device);
     Task ConnectAsync(BluetoothDevice device);
+    Task SendAsync(string message);
+    Task StartReceiveAsync(IEventHub _events);
+    Task StopReceiveAsync();
     Task DisconnectAsync();
 }

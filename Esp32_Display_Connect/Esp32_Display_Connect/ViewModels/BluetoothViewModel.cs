@@ -46,6 +46,10 @@ public partial class BluetoothViewModel : ViewModelBase, IHandleBackNavigation
         {
             BtDevicesList.Add(evt.device);
         }));
+        _subscriptions.Add(_events.Subscribe<BluetoothReceiveEvent>(async evt =>
+        {
+            Console.WriteLine($"Receive: {evt.message}");
+        }));
 
         RescanCommand = new AsyncRelayCommand(ScanAsync);
 
@@ -74,7 +78,9 @@ public partial class BluetoothViewModel : ViewModelBase, IHandleBackNavigation
 
     private async Task SelectDeviceAsync(BluetoothDevice device)
     {
-        Console.WriteLine(device.Name);
+        await _bluetooth.ConnectAsync(device);
+        await _bluetooth.StartReceiveAsync(_events);
+        await _bluetooth.SendAsync("test");
     }
 
     async Task<bool> IHandleBackNavigation.HandleBackAsync()

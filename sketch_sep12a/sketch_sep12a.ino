@@ -1,4 +1,3 @@
-
 #include <FS.h>
 #include <SPIFFS.h>
 #include <U8g2lib.h>
@@ -6,8 +5,6 @@
 #include <SPI.h>
 #include <string>
 #include <WiFi.h>
-#include <ESPAsyncWebServer.h>
-#include <AsyncTCP.h>
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <Preferences.h>
@@ -15,6 +12,8 @@
 
 #include "env.h"
 #include "cd_image.h"
+#include "Bluetooth.h"
+#include "WebSocket.h"
 
 #define UPDATE_OLED_PERIOD 2000
 #define UPDATE_TFT_PERIOD 500
@@ -53,14 +52,14 @@ String artistName = "";
 String currentSongName = "";
 bool isPlaying = false;
 
-AsyncWebServer server(80);
-AsyncWebSocket ws("/ws");
 JsonDocument telemetryJson;
 Preferences preferences;
 
 U8G2_SSD1306_72X40_ER_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, 6, 5);
 TFT_eSPI tft = TFT_eSPI();
 JPEGDEC jpeg;
+Bluetooth bluetooth;
+WebSocket websocket;
 
 void saveUser(String key, String user) {
   preferences.begin("last.fm", false); //read-write
@@ -81,28 +80,6 @@ String loadUserName() {
   String user = preferences.getString("user", "");
   preferences.end();
   return user;
-}
-
-void notifyClients() {
-
-  String jsonString;
-  serializeJson(telemetryJson, jsonString);
-  ws.textAll(jsonString);
-}
-
-void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
-  if (type == WS_EVT_CONNECT) 
-    status = "WS connected";
-  
-  else if (type == WS_EVT_DISCONNECT) 
-    status = "WS disconnect";
-
-  else if (type == WS_EVT_DATA) {
-    // Handle commands from app
-    message = String((char*)data).substring(0, len);
-
-    }
-    lastNotify = millis();
 }
 
 void drawOled () {
@@ -436,6 +413,15 @@ bool getNowPlaying() {
   return true;
 }
 
+void onWebSocketMessage(const String& message)
+{
+    Serial.println(message);
+}
+void onWebSocketStatus(const String& status)
+{
+    Serial.println(status);
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -448,11 +434,6 @@ void setup() {
   u8g2.begin();
   u8g2.enableUTF8Print();
 
-  ws.onEvent(onWsEvent);
-  server.addHandler(&ws);
-  server.begin();
-  delay(1000);
-
   // #define in env.h
   if (LASTFM_API_KEY == "" || LASTFM_USERNAME == "") {
     apiKey = loadApiKey();
@@ -463,12 +444,19 @@ void setup() {
     userName = LASTFM_USERNAME;
     saveUser(apiKey, userName);
   }
-
+  
+  delay(500);
   imageBuffer = (uint16_t*)malloc(IMAGE_SIZE * IMAGE_SIZE * sizeof(uint16_t));
   if (!imageBuffer)
       Serial.println("Failed to allocate image buffer");
   if(!loadDefaultPicture())
       Serial.println("Failed to load default image");
+
+  delay(500);
+  websocket.setMessageHandler(onWebSocketMessage, onWebSocketStatus);
+  websocket.begin();
+  delay(500);
+  bluetooth.begin();
 }
 
 void loop() {
@@ -501,8 +489,6 @@ void loop() {
 
   if (now - lastNotify >= NOTIFY_PERIOD) {
     lastNotify = now;
-    notifyClients();
   }
 
-  ws.cleanupClients();
 }

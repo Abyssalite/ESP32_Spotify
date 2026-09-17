@@ -7,11 +7,16 @@ using Avalonia_EventHub;
 using Linux.Bluetooth;
 using Linux.Bluetooth.Extensions;
 using Esp32_Display_Connect.Events;
+using System.Text;
 
 public sealed class BluetoothService : IBluetoothService
 {
     private IAdapter1? _adapter;
     private IDevice1? _connectedDevice;
+
+    private IGattCharacteristic1? _rxCharacteristic;
+    private IGattCharacteristic1? _txCharacteristic;
+    private IDisposable? _txNotificationWatch;
 
     public async Task<IReadOnlyList<BluetoothDevice>> ScanAsync(
         TimeSpan duration,
@@ -148,10 +153,81 @@ public sealed class BluetoothService : IBluetoothService
     {
         if (_connectedDevice is null)
             return;
+        if (_txCharacteristic is not null)
+            await _txCharacteristic.StopNotifyAsync();
 
         await _connectedDevice.DisconnectAsync();
         _connectedDevice = null;
 
         Console.WriteLine("BLE disconnected.");
+    }
+
+    public async Task SendAsync(string message)
+    {
+        if (_connectedDevice is null)
+            throw new InvalidOperationException(
+                "No Bluetooth device is connected.");
+
+        var service = await _connectedDevice.GetServiceAsync(Env.ServiceUuid);
+
+        if (service is null)
+            throw new InvalidOperationException($"BLE service was not found.");
+
+        _rxCharacteristic = await service.GetCharacteristicAsync(Env.RxCharacteristicUuid);
+
+        if (_rxCharacteristic is null)
+            throw new InvalidOperationException($"RX characteristic was not found.");
+
+        var data = System.Text.Encoding.UTF8.GetBytes(message);
+
+        await _rxCharacteristic.WriteValueAsync(data, new Dictionary<string, object>());
+
+        Console.WriteLine($"Sent: {message}");
+    }
+
+    public async Task StartReceiveAsync(IEventHub _events)
+    {
+        if (_connectedDevice is null)
+            throw new InvalidOperationException("No Bluetooth device is connected.");
+
+        var service = await _connectedDevice.GetServiceAsync(Env.ServiceUuid);
+
+        if (service is null)
+            throw new InvalidOperationException("BLE service was not found.");
+
+        _txCharacteristic = await service.GetCharacteristicAsync(Env.TxCharacteristicUuid);
+
+        if (_txCharacteristic is null)
+            throw new InvalidOperationException("TX characteristic was not found.");
+
+        _txNotificationWatch = await _txCharacteristic.WatchPropertiesAsync(
+            changes =>
+            {
+                foreach (var change in changes.Changed)
+                {
+                    if (change.Key != "Value")
+                        continue;
+                    if (change.Value is not byte[] bytes)
+                        continue;
+
+                    var message = Encoding.UTF8.GetString(bytes);
+                    _events.Publish(new BluetoothReceiveEvent(message));
+                }
+            });
+
+        await _txCharacteristic.StartNotifyAsync();
+
+        Console.WriteLine("BLE notifications started.");
+    }
+
+    public async Task StopReceiveAsync()
+    {
+        if (_txCharacteristic is not null)
+            await _txCharacteristic.StopNotifyAsync();
+
+        _txNotificationWatch?.Dispose();
+        _txNotificationWatch = null;
+
+        Console.WriteLine("BLE notifications stopped.");
     }
 }

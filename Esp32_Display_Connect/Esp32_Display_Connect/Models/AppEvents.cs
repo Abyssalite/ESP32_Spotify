@@ -1,3 +1,5 @@
+using System;
+
 namespace Esp32_Display_Connect.Events;
 
 public sealed record SelectedDeviceChangedEvent(Device? device);
@@ -9,3 +11,4 @@ public sealed record StatusReceivedEvent(DeviceStatus deviceStatus);
 public sealed record ConnectionStatusChangedEvent(string connectionStatus);
 
 public sealed record BluetoothDiscoveredEvent(BluetoothDevice device);
+public sealed record BluetoothReceiveEvent(String message);
